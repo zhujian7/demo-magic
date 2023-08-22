@@ -1,0 +1,16 @@
+apiVersion: imageregistry.open-cluster-management.io/v1alpha1
+kind: ManagedClusterImageRegistry
+metadata:
+  name: image-registry-1
+  namespace: multicluster-engine
+spec:
+  placementRef:
+    group: cluster.open-cluster-management.io
+    name: placement1
+    resource: placements
+  pullSecret:
+    name: my-image-pull-secret
+  registries:
+  - mirror: quay.io/zhujian/managed-serviceaccount-private
+    source: quay.io/stolostron/managed-serviceaccount
+  registry: ""

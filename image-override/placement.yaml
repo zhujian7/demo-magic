@@ -1,0 +1,17 @@
+apiVersion: cluster.open-cluster-management.io/v1beta1
+kind: Placement
+metadata:
+  name: placement1
+  namespace: multicluster-engine
+spec:
+  clusterSets:
+  - global
+  numberOfClusters: 10
+  predicates:
+  - requiredClusterSelector:
+      labelSelector:
+        matchLabels:
+          cloud: Amazon
+  tolerations:
+  - key: cluster.open-cluster-management.io/unreachable
+    operator: Exists
