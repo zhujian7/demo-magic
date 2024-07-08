@@ -1,0 +1,78 @@
+apiVersion: work.open-cluster-management.io/v1alpha1
+kind: ManifestWorkReplicaSet
+metadata:
+  name: my-gpu-app
+  namespace: default
+spec:
+  manifestWorkTemplate:
+    manifestConfigs:
+      - feedbackRules:
+          - type: WellKnownStatus
+        resourceIdentifier:
+          group: apps
+          name: qwen-vllm
+          namespace: default
+          resource: deployments
+    workload:
+      manifests:
+      - apiVersion: apps/v1
+        kind: Deployment
+        metadata:
+          labels:
+            app: qwen
+          name: qwen-vllm
+          namespace: default
+        spec:
+          replicas: 1
+          selector:
+            matchLabels:
+              app: qwen
+          strategy:
+            rollingUpdate:
+              maxSurge: 25%
+              maxUnavailable: 25%
+            type: RollingUpdate
+          template:
+            metadata:
+              labels:
+                app: qwen
+            spec:
+              containers:
+              - args:
+                - -c
+                - exec python3 -m vllm.entrypoints.openai.api_server --trust-remote-code
+                  --model /model/Qwen1.5-7B-Chat/ --gpu-memory-utilization 0.95 --max-model-len
+                  16384
+                command:
+                - /bin/bash
+                image: quay.io/zhujian/kube-ai-vllm:0.4.1
+                name: qwen
+                ports:
+                - containerPort: 8000
+                  name: qwen
+                resources:
+                  limits:
+                    nvidia.com/gpu: "1"
+                  requests:
+                    nvidia.com/gpu: "1"
+                volumeMounts:
+                - mountPath: /dev/shm
+                  name: shm
+                - mountPath: /model
+                  name: models
+              restartPolicy: Always
+              volumes:
+              - hostPath:
+                  path: /dev/shm
+                name: shm
+              - name: models
+                persistentVolumeClaim:
+                  claimName: model-data
+              tolerations:
+              - key: "nvidia.com/gpu"
+                operator: "Exists"
+                effect: "NoSchedule"
+  placementRefs:
+  - name: ${PLACEMENT_NAME}
+    rolloutStrategy:
+      type: All

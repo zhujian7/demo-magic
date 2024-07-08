@@ -33,3 +33,9 @@ function waitFor() {
     done
     # echo "$kind ($ns/$name) was created"
 }
+
+function switchKubeContext(){
+    local context=$1
+    commentNoWait "kubectl config use-context ${context}"
+    kubectl config use-context ${context}
+}

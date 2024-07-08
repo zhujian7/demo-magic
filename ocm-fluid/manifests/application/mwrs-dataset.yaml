@@ -1,0 +1,72 @@
+apiVersion: work.open-cluster-management.io/v1alpha1
+kind: ManifestWorkReplicaSet
+metadata:
+  name: my-model-dataset
+  namespace: default
+spec:
+  manifestWorkTemplate:
+    manifestConfigs:
+      - feedbackRules:
+          - jsonPaths:
+              - name: ufsTotal
+                path: .status.ufsTotal
+              - name: phase
+                path: .status.phase
+            type: JSONPaths
+        resourceIdentifier:
+          group: data.fluid.io
+          name: model-data
+          namespace: default
+          resource: datasets
+    workload:
+      manifests:
+      - apiVersion: v1
+        kind: Secret
+        metadata:
+          name: access-key
+          namespace: default
+        stringData:
+          aws.accessKeyId: ${AWS_ACCESS_KEY_ID}
+          aws.secretKey: ${AWS_SECRET_ACCESS_KEY}
+      - apiVersion: data.fluid.io/v1alpha1
+        kind: Dataset
+        metadata:
+          name: model-data
+          namespace: default
+        spec:
+          mounts:
+          - encryptOptions:
+            - name: aws.accessKeyId
+              valueFrom:
+                secretKeyRef:
+                  key: aws.accessKeyId
+                  name: access-key
+            - name: aws.secretKey
+              valueFrom:
+                secretKeyRef:
+                  key: aws.secretKey
+                  name: access-key
+            mountPoint: s3://zj-models
+            name: models
+            options:
+              alluxio.underfs.s3.endpoint: s3.amazonaws.com
+              alluxio.underfs.s3.region: us-east-1
+            path: /
+      - apiVersion: data.fluid.io/v1alpha1
+        kind: AlluxioRuntime
+        metadata:
+          name: model-data
+          namespace: default
+        spec:
+          replicas: 1
+          tieredstore:
+            levels:
+            - high: "0.99"
+              low: "0.99"
+              mediumtype: MEM
+              path: /dev/shm
+              quota: 10Gi
+  placementRefs:
+  - name: ${PLACEMENT_NAME}
+    rolloutStrategy:
+      type: All

@@ -1,0 +1,56 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: qwen-vllm
+  namespace: default
+  labels:
+    app: qwen
+spec:
+  selector:
+    matchLabels:
+      app: qwen
+  replicas: 1
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: qwen
+    spec:
+      containers:
+      - name: qwen
+        # image: kube-ai-registry.cn-shanghai.cr.aliyuncs.com/kube-ai/vllm:0.4.1
+        image: quay.io/zhujian/kube-ai-vllm:0.4.1
+        command:
+        - "/bin/bash"
+        args:
+        - -c
+        - "exec python3 -m vllm.entrypoints.openai.api_server --trust-remote-code --model /model/Qwen1.5-7B-Chat/ --gpu-memory-utilization 0.95 --max-model-len 16384"
+        volumeMounts:
+          - name: shm
+            mountPath: /dev/shm
+          - name: models
+            mountPath: /model
+        resources:
+          requests:
+            nvidia.com/gpu: "1"
+          limits:
+            nvidia.com/gpu: "1"
+        ports:
+        - containerPort: 8000
+          name:  qwen
+      restartPolicy: Always
+      volumes:
+        - name: shm
+          hostPath:
+            path: /dev/shm
+        - name: models
+          persistentVolumeClaim:
+            claimName: model-data
+      tolerations:
+      - key: "nvidia.com/gpu"
+        operator: "Exists"
+        effect: "NoSchedule"
