@@ -1,0 +1,33 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: pull-image-job
+  labels:
+    app: pull-image
+spec:
+  # replicas: 1
+  # selector:
+  #   matchLabels:
+  #     app: pull-image
+  template:
+    metadata:
+      labels:
+        app: pull-image
+    spec:
+      restartPolicy: OnFailure
+      nodeSelector:
+        cloud.google.com/gke-nodepool: gpu-pool
+      tolerations:
+      - key: "nvidia.com/gpu"
+        operator: "Exists"
+        effect: "NoSchedule"
+      containers:
+      - name: pull-image
+        image: quay.io/zhujian/kube-ai-vllm:0.4.1
+        command:
+        - "/bin/bash"
+        args:
+        - -c
+        - sleep 60
+
+

@@ -1,0 +1,78 @@
+apiVersion: work.open-cluster-management.io/v1alpha1
+kind: ManifestWorkReplicaSet
+metadata:
+  name: my-model-dataset
+  namespace: default
+spec:
+  manifestWorkTemplate:
+    manifestConfigs:
+      - feedbackRules:
+          - jsonPaths:
+              - name: ufsTotal
+                path: .status.ufsTotal
+              - name: phase
+                path: .status.phase
+            type: JSONPaths
+        resourceIdentifier:
+          group: data.fluid.io
+          name: model-data
+          namespace: default
+          resource: datasets
+    workload:
+      manifests:
+      - apiVersion: v1
+        kind: Secret
+        metadata:
+          name: access-key
+          namespace: default
+        stringData:
+          AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+          AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      - apiVersion: data.fluid.io/v1alpha1
+        kind: Dataset
+        metadata:
+          name: model-data
+          namespace: default
+        spec:
+          accessModes:
+            - ReadOnlyMany
+          placement: "Shared"
+          mounts:
+          - encryptOptions:
+            - name: s3a.accessKeyId
+              valueFrom:
+                secretKeyRef:
+                  key: AWS_ACCESS_KEY_ID
+                  name: access-key
+            - name: s3a.secretKey
+              valueFrom:
+                secretKeyRef:
+                  key: AWS_SECRET_ACCESS_KEY
+                  name: access-key
+            mountPoint: s3://zj-models/models/Qwen1.5-4B-Chat/
+            # mountPoint: s3://zj-models/models/Qwen1.5-0.5B-Chat/
+            name: models
+            options:
+              alluxio.underfs.s3.region: "us-east-1"
+              alluxio.underfs.s3.secure.http.enabled: "true"
+              alluxio.debug: "true"
+              alluxio.fuse.debug.enabled: "true"
+            path: /models
+      - apiVersion: data.fluid.io/v1alpha1
+        kind: AlluxioRuntime
+        metadata:
+          name: model-data
+          namespace: default
+        spec:
+          replicas: 1
+          tieredstore:
+            levels:
+            - high: "0.99"
+              low: "0.99"
+              mediumtype: MEM
+              path: /dev/shm
+              quota: 10Gi
+  placementRefs:
+  - name: ${PLACEMENT_NAME}
+    rolloutStrategy:
+      type: All

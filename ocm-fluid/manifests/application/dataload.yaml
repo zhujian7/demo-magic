@@ -1,0 +1,14 @@
+apiVersion: data.fluid.io/v1alpha1
+kind: DataLoad
+metadata:
+  name: model-dataload
+  namespace: default
+spec:
+  dataset:
+    name: model-data
+    namespace: default
+  loadMetadata: true
+  target:
+    - replicas: 1
+      # The path relative to the mountpoint in the Dataset. For example, the full path here is s3://zj-models/models/Qwen1.5-7B-Chat
+      path: /models/Qwen1.5-7B-Chat
