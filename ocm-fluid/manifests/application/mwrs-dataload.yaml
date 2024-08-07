@@ -1,0 +1,37 @@
+apiVersion: work.open-cluster-management.io/v1alpha1
+kind: ManifestWorkReplicaSet
+metadata:
+  name: my-dataload
+  namespace: default
+spec:
+  manifestWorkTemplate:
+    manifestConfigs:
+      - feedbackRules:
+          - jsonPaths:
+              - name: phase
+                path: .status.phase
+            type: JSONPaths
+        resourceIdentifier:
+          group: data.fluid.io
+          name: model-dataload
+          namespace: default
+          resource: dataloads
+    workload:
+      manifests:
+      - apiVersion: data.fluid.io/v1alpha1
+        kind: DataLoad
+        metadata:
+          name: model-dataload
+          namespace: default
+        spec:
+          dataset:
+            name: model-data
+            namespace: default
+          loadMetadata: true
+          target:
+          - path: /models
+            replicas: 1
+  placementRefs:
+  - name: ${PLACEMENT_NAME}
+    rolloutStrategy:
+      type: All

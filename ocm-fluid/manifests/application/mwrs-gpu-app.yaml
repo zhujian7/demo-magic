@@ -1,0 +1,104 @@
+apiVersion: work.open-cluster-management.io/v1alpha1
+kind: ManifestWorkReplicaSet
+metadata:
+  name: my-gpu-app
+  namespace: default
+spec:
+  manifestWorkTemplate:
+    manifestConfigs:
+      - feedbackRules:
+          - type: WellKnownStatus
+        resourceIdentifier:
+          group: apps
+          name: qwen-vllm
+          namespace: default
+          resource: deployments
+    workload:
+      manifests:
+      - apiVersion: apps/v1
+        kind: Deployment
+        metadata:
+          labels:
+            app: qwen
+          name: qwen-vllm
+          namespace: default
+        spec:
+          replicas: 1
+          selector:
+            matchLabels:
+              app: qwen
+          strategy:
+            # rollingUpdate:
+            #   maxSurge: 25%
+            #   maxUnavailable: 25%
+            # type: RollingUpdate
+            type: Recreate
+          template:
+            metadata:
+              labels:
+                app: qwen
+            spec:
+              containers:
+              - args:
+                - -c
+                - exec python3 -m vllm.entrypoints.openai.api_server --trust-remote-code
+                  --model /model/models/ --gpu-memory-utilization 0.95 --max-model-len 8192
+                  --dtype half
+                  # --enforce-eager
+                  # ValueError: The model's max seq len (16384) is larger than the maximum number of tokens that can be stored in KV cache (9584). Try increasing `gpu_memory_utilization` or decreasing `max_model_len` when initializing the engine.
+                command:
+                - /bin/bash
+                # image: quay.io/zhujian/kube-ai-vllm:0.4.1
+                # image: registry.cn-beijing.aliyuncs.com/fluid-namespace/vllm:0.4.1-nsys-optim
+                image: quay.io/zhujian/kube-ai-vllm:0.4.1-nsys-optim
+                name: qwen
+                env:
+                # - name: PYTORCH_CUDA_ALLOC_CONF
+                #   value: "expandable_segments:True"
+                ports:
+                - containerPort: 8000
+                  name: qwen
+                readinessProbe:
+                  httpGet:
+                    path: /v1/models
+                    port: 8000
+                  initialDelaySeconds: 120   # Wait 5 minutes before starting readiness checks
+                  periodSeconds: 10          # Check readiness every 10 seconds
+                  timeoutSeconds: 5          # Timeout for each readiness check
+                  failureThreshold: 5        # Number of consecutive failures before marking the pod as Unready
+                livenessProbe:
+                  httpGet:
+                    path: /v1/models
+                    port: 8000
+                  initialDelaySeconds: 120   # Wait 5 minutes before starting liveness checks
+                  periodSeconds: 20          # Check liveness every 20 seconds
+                  timeoutSeconds: 5          # Timeout for each liveness check
+                  failureThreshold: 5        # Number of consecutive failures before restarting the container
+                resources:
+                  limits:
+                    nvidia.com/gpu: "1"
+                    memory: 16Gi
+                  requests:
+                    nvidia.com/gpu: "1"
+                    memory: 2Gi
+                volumeMounts:
+                - mountPath: /dev/shm
+                  name: shm
+                - mountPath: /model
+                  name: models
+              restartPolicy: Always
+              volumes:
+              - hostPath:
+                  path: /dev/shm
+                name: shm
+              - name: models
+                persistentVolumeClaim:
+                  claimName: model-data
+              tolerations:
+              - key: "nvidia.com/gpu"
+                operator: "Exists"
+                effect: "NoSchedule"
+  placementRefs:
+  - name: ${PLACEMENT_NAME}
+    rolloutStrategy:
+      type: All
