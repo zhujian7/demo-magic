@@ -1,0 +1,84 @@
+apiVersion: work.open-cluster-management.io/v1alpha1
+kind: ManifestWorkReplicaSet
+metadata:
+  name: pull-image-jobs
+  namespace: default
+spec:
+  manifestWorkTemplate:
+    manifestConfigs:
+    - resourceIdentifier:
+        group: batch
+        name: pull-image-job
+        namespace: default
+        resource: jobs
+      updateStrategy:
+        type: ServerSideApply
+    - resourceIdentifier:
+        group: batch
+        name: pull-image-job-new
+        namespace: default
+        resource: jobs
+      updateStrategy:
+        type: ServerSideApply
+    workload:
+      manifests:
+      - apiVersion: batch/v1
+        kind: Job
+        metadata:
+          name: pull-image-job
+          namespace: default
+          labels:
+            app: pull-image
+        spec:
+          template:
+            metadata:
+              labels:
+                app: pull-image
+            spec:
+              restartPolicy: OnFailure
+              nodeSelector:
+                cloud.google.com/gke-nodepool: gpu-pool
+              tolerations:
+              - key: "nvidia.com/gpu"
+                operator: "Exists"
+                effect: "NoSchedule"
+              containers:
+              - name: pull-image
+                image: quay.io/zhujian/kube-ai-vllm:0.4.1
+                command:
+                - "/bin/bash"
+                args:
+                - -c
+                - sleep 10
+      - apiVersion: batch/v1
+        kind: Job
+        metadata:
+          name: pull-image-job-new
+          namespace: default
+          labels:
+            app: pull-image-new
+        spec:
+          template:
+            metadata:
+              labels:
+                app: pull-image-new
+            spec:
+              restartPolicy: OnFailure
+              nodeSelector:
+                cloud.google.com/gke-nodepool: gpu-pool
+              tolerations:
+              - key: "nvidia.com/gpu"
+                operator: "Exists"
+                effect: "NoSchedule"
+              containers:
+              - name: pull-image
+                image: quay.io/zhujian/kube-ai-vllm:0.4.1-nsys-optim
+                command:
+                - "/bin/bash"
+                args:
+                - -c
+                - sleep 10
+  placementRefs:
+  - name: ${PLACEMENT_NAME}
+    rolloutStrategy:
+      type: All

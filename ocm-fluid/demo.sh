@@ -47,6 +47,7 @@ HUB_KUBECONFIG="${KUBECONFIG:=${DEMO_DIR}/credentials/ocm-hub.kubeconfig}"
 
 GKE_KUBECONFIG_1="${GKE_KUBECONFIG_1:=${DEMO_DIR}/credentials/gke1.kubeconfig}"
 GKE_KUBECONFIG_2="${GKE_KUBECONFIG_2:=${DEMO_DIR}/credentials/gke2.kubeconfig}"
+AWS_CREDS="${DEMO_DIR}/credentials/aws-credentials"
 GKE_ZONE_1="us-central1-c"
 GKE_CLUSTER_NAME_1="zj-cluster-1"
 GKE_ZONE_2="us-east1-c"
@@ -154,6 +155,7 @@ function createGPUApp(){
 
 function createFluidDataset(){
     comment "Create a Fluid dataset"
+    source ${AWS_CREDS}
     # check if the AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment variables are set
     if [ -z "$AWS_ACCESS_KEY_ID" ] || [ -z "$AWS_SECRET_ACCESS_KEY" ]; then
         echo "AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment variables are required"
@@ -164,16 +166,34 @@ function createFluidDataset(){
 
     # pei "envsubst < ${DEMO_DIR}/manifests/application/alluxio-dataset-s3.yaml | clusteradm create work my-model-dataset --placement default/${PLACEMENT_NAME} --replicaset=true --overwrite -f -"
     export PLACEMENT_NAME
+    export AWS_ACCESS_KEY_ID
+    export AWS_SECRET_ACCESS_KEY
     pei "envsubst < ${DEMO_DIR}/manifests/application/mwrs-dataset.yaml | kubectl apply -f -"
 }
 
 function createFluidDataLoad(){
-    comment "Create a Fluid data load"
+    comment "Create a Fluid dataload"
     pei "kubectl wait --timeout=1m placement/${PLACEMENT_NAME} --for=condition=PlacementSatisfied"
     # pei "clusteradm create work my-dataload --placement default/${PLACEMENT_NAME} --replicaset=true --overwrite -f ${DEMO_DIR}/manifests/application/dataload.yaml"
 
     export PLACEMENT_NAME
     pei "envsubst < ${DEMO_DIR}/manifests/application/mwrs-dataload.yaml | kubectl apply -f -"
+}
+
+function createFluidDataFlow(){
+    comment "Create a Fluid dataflow"
+    pei "kubectl wait --timeout=1m placement/${PLACEMENT_NAME} --for=condition=PlacementSatisfied"
+    # pei "clusteradm create work my-dataload --placement default/${PLACEMENT_NAME} --replicaset=true --overwrite -f ${DEMO_DIR}/manifests/application/dataload.yaml"
+
+    export PLACEMENT_NAME
+    pei "envsubst < ${DEMO_DIR}/manifests/application/mwrs-dataflow.yaml | kubectl apply -f -"
+}
+
+function createImagePullJobs(){
+    # pei "kubectl wait --timeout=1m placement/${PLACEMENT_NAME} --for=condition=PlacementSatisfied"
+
+    export PLACEMENT_NAME
+    envsubst < ${DEMO_DIR}/manifests/application/mwrs-pull-images.yaml | kubectl apply -f -
 }
 
 function getPlacementResults(){
@@ -199,12 +219,17 @@ function getPlacementResults(){
 }
 
 function getAddonPlacementScores(){
-    local clusters=$(kubectl get addonplacementscores -A | grep -v NAMESPACE | awk '{print $1}')
+    # local clusters=$(kubectl get addonplacementscores -A | grep -v NAMESPACE | awk '{print $1}')
 
-    for current_cluster in ${clusters}; do
-        kubectl get addonplacementscores -n ${current_cluster} resource-usage-score\
-         -o custom-columns=CLUSTER:.metadata.namespace,GPU_AVAILABLE_SCORE:'.status.scores[?(@.name=="gpuAvailable")].value'
-    done
+    # for current_cluster in ${clusters}; do
+    #     kubectl get addonplacementscores -n ${current_cluster} resource-usage-score\
+    #      -o custom-columns=CLUSTER:.metadata.namespace,GPU_AVAILABLE_SCORE:'.status.scores[?(@.name=="gpuAvailable")].value'
+    # done
+
+    echo -e "CLUSTER\t\tGPU_AVAILABLE_SCORE"
+    kubectl get addonplacementscores -A -o json | jq -r '.items[] |
+     {cluster: .metadata.namespace, gpuAvailable: (.status.scores[] | select(.name == "gpuAvailable") | .value)} |
+      "\(.cluster)\t\(.gpuAvailable)"'
 }
 
 function saveHubCA(){
@@ -399,6 +424,7 @@ case "$1" in
     createPlacements > /dev/null 2>&1
     enableResourceUsageCollectAddons
     enableFluidAddons
+    createImagePullJobs > /dev/null 2>&1
     ;;
   deploy-app)
     createPlacements > /dev/null 2>&1
@@ -406,10 +432,11 @@ case "$1" in
     installNginx
     ;;
   deploy-ai-app)
-    createPlacements > /dev/null 2>&1
+    # createPlacements > /dev/null 2>&1
     createFluidDataset
-    createFluidDataLoad
-    createGPUApp
+    # createFluidDataLoad
+    # createGPUApp
+    createFluidDataFlow
     ;;
   all)
     setUpEnvironment
@@ -420,8 +447,9 @@ case "$1" in
     enableAppAddons
     installNginx
     createFluidDataset
-    createFluidDataLoad
-    createGPUApp
+    # createFluidDataLoad
+    # createGPUApp
+    createFluidDataFlow
     ;;
   help)
     help
