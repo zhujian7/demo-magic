@@ -14,22 +14,33 @@ spec:
       labels:
         app: s3-qwen
     spec:
-      initContainers:
-      - name: s3fs
-        image: ubuntu:20.04
+      containers:
+      - name: qwen
+        args:
+        - |
+          echo "check /mnt/s3 folder"
+          ls -la /mnt/s3
+          rm -rf /mnt/s3/*
+          echo "start to mount s3 bucket, date: $(date)"
+          s3fs zj-models /mnt/s3/ -o allow_other -o use_cache=/tmp
+          echo "start to check s3fs mount"
+          while true; do
+            echo "s3fs mount is not ready, waiting ..."
+            mount | grep s3fs
+            sleep 1
+            if [ "$(mount | grep -c s3fs)" -ne 0 ]; then
+              echo "s3fs is ready" && break
+            fi
+          done
+          echo "check /mnt/s3 folder"
+          ls -la /mnt/s3
+          exec python3 -m vllm.entrypoints.openai.api_server --trust-remote-code \
+            --model /mnt/s3/models/Qwen1.5-4B-Chat --gpu-memory-utilization 0.95 --max-model-len 8192 \
+            --dtype half --enforce-eager
         command: ["/bin/sh", "-c"]
-        restartPolicy: Always
+        image: quay.io/zhujian/s3fs:vllm
         securityContext:
           privileged: true
-        args:
-        - apt-get update && apt-get install -y s3fs fuse && mkdir -p /mnt/s3 && s3fs zj-models /mnt/s3/ -o allow_other -o use_cache=/tmp
-        lifecycle:
-          postStart:
-            exec:
-              command:
-              - "bash"
-              - "-c"
-              - while true; do sleep 1; if [[ "$(mount | grep -c s3fs)" -ne 0 ]]; then break; fi; done
         env:
         - name: AWSACCESSKEYID
           valueFrom:
@@ -41,20 +52,10 @@ spec:
             secretKeyRef:
               name: access-key
               key: AWS_SECRET_ACCESS_KEY
-        volumeMounts:
-        - name: s3-mount
-          mountPath: /mnt/s3
-          mountPropagation: Bidirectional
-      containers:
-      - name: qwen
-        args:
-        - -c
-        - sleep 600
-        command:
-        - /bin/bash
-        # image: quay.io/zhujian/kube-ai-vllm:0.4.1
-        # image: registry.cn-beijing.aliyuncs.com/fluid-namespace/vllm:0.4.1-nsys-optim
-        image: quay.io/zhujian/kube-ai-vllm:0.4.1-nsys-optim
+        # volumeMounts:
+        # - name: s3-mount
+        #   mountPath: /mnt/s3
+        #   mountPropagation: Bidirectional
         ports:
         - containerPort: 8000
           name: qwen
@@ -62,18 +63,18 @@ spec:
           httpGet:
             path: /v1/models
             port: 8000
-          initialDelaySeconds: 120   # Wait 5 minutes before starting readiness checks
-          periodSeconds: 10          # Check readiness every 10 seconds
-          timeoutSeconds: 5          # Timeout for each readiness check
-          failureThreshold: 5        # Number of consecutive failures before marking the pod as Unready
+          initialDelaySeconds: 120
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 5
         livenessProbe:
           httpGet:
             path: /v1/models
             port: 8000
-          initialDelaySeconds: 120   # Wait 5 minutes before starting liveness checks
-          periodSeconds: 20          # Check liveness every 20 seconds
-          timeoutSeconds: 5          # Timeout for each liveness check
-          failureThreshold: 5        # Number of consecutive failures before restarting the container
+          initialDelaySeconds: 120 
+          periodSeconds: 20
+          timeoutSeconds: 5
+          failureThreshold: 5
         resources:
           limits:
             nvidia.com/gpu: "1"
@@ -83,13 +84,14 @@ spec:
             memory: 2Gi
         volumeMounts:
         - name: s3-mount
-          mountPath: /model
-          subPath: models/Qwen1.5-4B-Chat
-          mountPropagation: HostToContainer
+          mountPath: /mnt/s3
+          # subPath: models/Qwen1.5-4B-Chat
+          # mountPropagation: HostToContainer
+          mountPropagation: Bidirectional
       volumes:
       - name: s3-mount
         hostPath:
-          path: "/tmp/s3"
+          path: "/tmp/s3-2"
           type: DirectoryOrCreate
       tolerations:
       - key: "nvidia.com/gpu"

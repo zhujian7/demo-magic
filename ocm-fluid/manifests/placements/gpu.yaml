@@ -13,10 +13,10 @@ spec:
           addOn:
             resourceName: resource-usage-score
             scoreName: gpuAvailable
-        weight: 2
+        weight: 5
       - scoreCoordinate:
           builtIn: Steady
-        weight: 3
+        weight: 1
       # - scoreCoordinate:
       #     builtIn: ResourceAllocatableCPU
       #   weight: 1

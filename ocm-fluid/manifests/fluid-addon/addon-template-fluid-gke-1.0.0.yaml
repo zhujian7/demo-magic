@@ -216,7 +216,7 @@ spec:
                       fieldPath: metadata.namespace
                 - name: HELM_DRIVER
                   value: configmap
-                image: fluidcloudnative/dataset-controller:v1.0.0-31f5433
+                image: fluidcloudnative/dataset-controller:v1.0.1-14eda3b
                 name: manager
                 ports:
                 - containerPort: 8080
