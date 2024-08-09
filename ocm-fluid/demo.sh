@@ -166,9 +166,13 @@ function createFluidDataset(){
 
     # pei "envsubst < ${DEMO_DIR}/manifests/application/alluxio-dataset-s3.yaml | clusteradm create work my-model-dataset --placement default/${PLACEMENT_NAME} --replicaset=true --overwrite -f -"
     export PLACEMENT_NAME
+    # execute this cat command before export AWS environment variables, otherwise the AWS credentials will be exposed
+    pe "envsubst < ${DEMO_DIR}/manifests/application/mwrs-dataset.yaml | cat"
+
     export AWS_ACCESS_KEY_ID
     export AWS_SECRET_ACCESS_KEY
-    pei "envsubst < ${DEMO_DIR}/manifests/application/mwrs-dataset.yaml | kubectl apply -f -"
+
+    pe "envsubst < ${DEMO_DIR}/manifests/application/mwrs-dataset.yaml | kubectl apply -f -"
 }
 
 function createFluidDataLoad(){
@@ -186,7 +190,8 @@ function createFluidDataFlow(){
     # pei "clusteradm create work my-dataload --placement default/${PLACEMENT_NAME} --replicaset=true --overwrite -f ${DEMO_DIR}/manifests/application/dataload.yaml"
 
     export PLACEMENT_NAME
-    pei "envsubst < ${DEMO_DIR}/manifests/application/mwrs-dataflow.yaml | kubectl apply -f -"
+    pe "envsubst < ${DEMO_DIR}/manifests/application/mwrs-dataflow.yaml | cat"
+    pe "envsubst < ${DEMO_DIR}/manifests/application/mwrs-dataflow.yaml | kubectl apply -f -"
 }
 
 function createImagePullJobs(){
@@ -226,10 +231,16 @@ function getAddonPlacementScores(){
     #      -o custom-columns=CLUSTER:.metadata.namespace,GPU_AVAILABLE_SCORE:'.status.scores[?(@.name=="gpuAvailable")].value'
     # done
 
-    echo -e "CLUSTER\t\tGPU_AVAILABLE_SCORE"
-    kubectl get addonplacementscores -A -o json | jq -r '.items[] |
-     {cluster: .metadata.namespace, gpuAvailable: (.status.scores[] | select(.name == "gpuAvailable") | .value)} |
-      "\(.cluster)\t\(.gpuAvailable)"'
+    # echo -e "CLUSTER\t\tGPU_AVAILABLE_SCORE"
+    # kubectl get addonplacementscores -A -o json | jq -r '.items[] |
+    #  {cluster: .metadata.namespace, gpuAvailable: (.status.scores[] | select(.name == "gpuAvailable") | .value)} |
+    #   "\(.cluster)\t\(.gpuAvailable)"'
+
+    pe 'echo -e "CLUSTER\t\tGPU_AVAILABLE_SCORE" && kubectl get addonplacementscores -A -o json | jq -r '\''.items[] | {cluster: .metadata.namespace, gpuAvailable: (.status.scores[] | select(.name == "gpuAvailable") | .value)} | "\(.cluster)\t\(.gpuAvailable)"'\'''
+}
+
+function showmwstatus(){
+    pei 'echo -e "CLUSTER\t\tAPPLIED\t\tNAME" && kubectl get manifestwork -A --field-selector metadata.name!=addon-fluid-deploy-0,metadata.name!=addon-resource-usage-collect-deploy-0 -o json | jq -r '\''.items[] | {cluster: .metadata.namespace, name: .metadata.name, applied: (.status.conditions[] | select(.type == "Applied") | .status)} | "\(.cluster)\t\(.applied)\t\t\(.name)"'\'''
 }
 
 function saveHubCA(){
@@ -392,6 +403,38 @@ EOF
     oc adm policy add-scc-to-user anyuid -z fluid-webhook -n fluid-system
 }
 
+function main(){
+    p "# This demo will use placment API to select clusters with most available GPU resources, and deploy an AI application with fluid dataset and dataflow to the selected clusters."
+    p "# OCM is installed with 4 managed clusters, 2 GKE clusters, and 2 other clusters"
+    pe "kubectl get managedcluster"
+    p "# The fluid addon and resource-usage-collect addon are enabled on all managed clusters"
+    pe "kubectl get managedclusteraddon --all-namespaces"
+    p "# The resource-usage-collect addon can report the resources usage(CPU/Memory/GPU/TPU) of the managed clusters to the hub cluster via the addonplacementscores"
+
+    clusters=$(getPlacementResults placement-all)
+    for current_cluster in ${clusters}; do
+        pe "kubectl get addonplacementscores -n ${current_cluster} resource-usage-score -oyaml"
+        break
+    done
+    getAddonPlacementScores
+
+    p "# Create a placement to select clusters with GPU resources"
+    pe "cat ${DEMO_DIR}/manifests/placements/gpu.yaml"
+    pe "kubectl apply -f ${DEMO_DIR}/manifests/placements/gpu.yaml"
+    pe "kubectl get placement placement-gpu -oyaml"
+
+    pe "kubectl wait --timeout=1m placement/placement-gpu --for=condition=PlacementSatisfied"
+    pe "kubectl get placementdecision $(kubectl get placement placement-gpu -ojsonpath='{.status.decisionGroups[0].decisions[0]}') -oyaml"
+    pe "kubectl describe placement placement-gpu"
+
+    createFluidDataset
+    createFluidDataFlow
+    comment "Check if the Fluid dataset and dataflow are applied on the selected clusters"
+    showmwstatus
+    repl
+    return
+}
+
 # Function for the 'help' subcommand
 help() {
   echo "Usage: $0 {setup-env|enable-addons|deploy-ai-app|deploy-app|all|call|help}"
@@ -437,6 +480,9 @@ case "$1" in
     # createFluidDataLoad
     # createGPUApp
     createFluidDataFlow
+    ;;
+  main)
+    main
     ;;
   all)
     setUpEnvironment
