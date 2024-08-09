@@ -87,7 +87,7 @@ spec:
                         - exec python3 -m vllm.entrypoints.openai.api_server --trust-remote-code
                           --model /model/models/ --gpu-memory-utilization 0.95 --max-model-len 8192
                           --dtype half
-                          # --enforce-eager
+                          --enforce-eager
                           # ValueError: The model's max seq len (16384) is larger than the maximum number of tokens that can be stored in KV cache (9584). Try increasing `gpu_memory_utilization` or decreasing `max_model_len` when initializing the engine.
                         command:
                         - /bin/bash
