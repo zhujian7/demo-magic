@@ -17,9 +17,3 @@ spec:
       - scoreCoordinate:
           builtIn: Steady
         weight: 1
-      # - scoreCoordinate:
-      #     builtIn: ResourceAllocatableCPU
-      #   weight: 1
-      # - scoreCoordinate:
-      #     builtIn: ResourceAllocatableMemory
-      #   weight: 1
