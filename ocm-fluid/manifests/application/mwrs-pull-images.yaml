@@ -44,7 +44,7 @@ spec:
                 effect: "NoSchedule"
               containers:
               - name: pull-image
-                image: quay.io/zhujian/kube-ai-vllm:0.4.1
+                image: quay.io/zhujian/s3fs:vllm-2
                 command:
                 - "/bin/bash"
                 args:
@@ -72,7 +72,7 @@ spec:
                 effect: "NoSchedule"
               containers:
               - name: pull-image
-                image: quay.io/zhujian/kube-ai-vllm:0.4.1-nsys-optim
+                image: quay.io/zhujian/kube-ai-vllm:0.4.1-nsys-optim-2
                 command:
                 - "/bin/bash"
                 args:

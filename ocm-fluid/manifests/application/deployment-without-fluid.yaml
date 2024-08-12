@@ -91,7 +91,7 @@ spec:
       volumes:
       - name: s3-mount
         hostPath:
-          path: "/tmp/s3-13"
+          path: "/tmp/s3"
           type: DirectoryOrCreate
       tolerations:
       - key: "nvidia.com/gpu"
