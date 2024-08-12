@@ -429,7 +429,7 @@ function main(){
 
     createFluidDataset
     createFluidDataFlow
-    comment "Check if the Fluid dataset and dataflow are applied on the selected clusters"
+    comment "Check if the Fluid dataset and dataflow are applied on the selected clusters(showmwstatus)"
     showmwstatus
     repl
     return

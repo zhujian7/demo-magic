@@ -88,16 +88,10 @@ spec:
                           --model /model/models/ --gpu-memory-utilization 0.95 --max-model-len 8192
                           --dtype half
                           --enforce-eager
-                          # ValueError: The model's max seq len (16384) is larger than the maximum number of tokens that can be stored in KV cache (9584). Try increasing `gpu_memory_utilization` or decreasing `max_model_len` when initializing the engine.
                         command:
                         - /bin/bash
-                        # image: quay.io/zhujian/kube-ai-vllm:0.4.1
-                        # image: registry.cn-beijing.aliyuncs.com/fluid-namespace/vllm:0.4.1-nsys-optim
-                        image: quay.io/zhujian/kube-ai-vllm:0.4.1-nsys-optim
+                        image: quay.io/zhujian/kube-ai-vllm:0.4.1-nsys-optim-2
                         name: qwen
-                        env:
-                        # - name: PYTORCH_CUDA_ALLOC_CONF
-                        #   value: "expandable_segments:True"
                         ports:
                         - containerPort: 8000
                           name: qwen
