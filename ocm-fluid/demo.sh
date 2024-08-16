@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 
-
 TMP_DEMO_DIR="$(dirname "${BASH_SOURCE[0]}")"
 DEMO_DIR="$(cd ${TMP_DEMO_DIR} && pwd)"
 ROOT_DIR="$(cd ${DEMO_DIR}/.. && pwd)"
@@ -55,10 +54,8 @@ GKE_CLUSTER_NAME_2="zj-cluster-2"
 
 PLACEMENT_NAME="placement-gpu"
 
-
 function ensureClusteradmCli() {
-    if ! command -v clusteradm &> /dev/null
-    then
+    if ! command -v clusteradm &>/dev/null; then
         echo "clusteradm could not be found"
     fi
 }
@@ -81,21 +78,21 @@ function enableAppAddons() {
     pei "kubectl get managedclusteraddon --all-namespaces"
 }
 
-function enableResourceUsageCollectAddons(){
+function enableResourceUsageCollectAddons() {
     comment "Install the resource-usage-collect addon"
     pei "kubectl apply -f ${DEMO_DIR}/manifests/resource-usage-collect-addon"
 
     pei "kubectl get managedclusteraddon --all-namespaces"
 }
 
-function enableFluidAddons(){
+function enableFluidAddons() {
     comment "Install the fluid addon"
     pei "kubectl apply -f ${DEMO_DIR}/manifests/fluid-addon"
 
     pei "kubectl get managedclusteraddon --all-namespaces"
 }
 
-function loadImages(){
+function loadImages() {
     clusters=$(getPlacementResults placement-all)
     echo "clusters: ${clusters}"
     for current_cluster in ${clusters}; do
@@ -103,7 +100,7 @@ function loadImages(){
     done
 }
 
-function loadFluidImages(){
+function loadFluidImages() {
     clusterName=$1
     if [ -z "$clusterName" ]; then
         echo "clusterName is required"
@@ -125,7 +122,7 @@ function loadFluidImages(){
     kind load docker-image --name=${clusterName} nginx
 }
 
-function createPlacements(){
+function createPlacements() {
     kubectl apply -f ${DEMO_DIR}/manifests/placements
     kubectl get placement
     kubectl wait --timeout=1m placement/placement-all --for=condition=PlacementSatisfied
@@ -133,18 +130,18 @@ function createPlacements(){
     # kubectl wait --timeout=1m placement/placement-cpu --for=condition=PlacementSatisfied
 }
 
-function installNginx(){
+function installNginx() {
     comment "Deploy the nginx application"
     pei "kubectl apply -f ${DEMO_DIR}/manifests/nginx-application"
 }
 
-function checkNginx(){
+function checkNginx() {
     comment "Check the nginx application"
     pei "kubectl get managedcluster"
     pei "kubectl get subscriptions.apps.open-cluster-management.io -n default"
 }
 
-function createGPUApp(){
+function createGPUApp() {
     pei "kubectl wait --timeout=1m placement/${PLACEMENT_NAME} --for=condition=PlacementSatisfied"
     comment "Create a GPU application on the selected clusters"
     # pei "clusteradm create work my-gpu-app --placement default/${PLACEMENT_NAME} --replicaset=true --overwrite -f ${DEMO_DIR}/manifests/application/deployment.yaml"
@@ -153,7 +150,7 @@ function createGPUApp(){
     pei "envsubst < ${DEMO_DIR}/manifests/application/mwrs-gpu-app.yaml | kubectl apply -f -"
 }
 
-function createFluidDataset(){
+function createFluidDataset() {
     comment "Create a Fluid dataset"
     source ${AWS_CREDS}
     # check if the AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment variables are set
@@ -175,7 +172,7 @@ function createFluidDataset(){
     pe "envsubst < ${DEMO_DIR}/manifests/application/mwrs-dataset.yaml | kubectl apply -f -"
 }
 
-function createFluidDataLoad(){
+function createFluidDataLoad() {
     comment "Create a Fluid dataload"
     pei "kubectl wait --timeout=1m placement/${PLACEMENT_NAME} --for=condition=PlacementSatisfied"
     # pei "clusteradm create work my-dataload --placement default/${PLACEMENT_NAME} --replicaset=true --overwrite -f ${DEMO_DIR}/manifests/application/dataload.yaml"
@@ -184,7 +181,7 @@ function createFluidDataLoad(){
     pei "envsubst < ${DEMO_DIR}/manifests/application/mwrs-dataload.yaml | kubectl apply -f -"
 }
 
-function createFluidDataFlow(){
+function createFluidDataFlow() {
     comment "Create a Fluid dataflow"
     pei "kubectl wait --timeout=1m placement/${PLACEMENT_NAME} --for=condition=PlacementSatisfied"
     # pei "clusteradm create work my-dataload --placement default/${PLACEMENT_NAME} --replicaset=true --overwrite -f ${DEMO_DIR}/manifests/application/dataload.yaml"
@@ -194,14 +191,14 @@ function createFluidDataFlow(){
     pe "envsubst < ${DEMO_DIR}/manifests/application/mwrs-dataflow.yaml | kubectl apply -f -"
 }
 
-function createImagePullJobs(){
+function createImagePullJobs() {
     # pei "kubectl wait --timeout=1m placement/${PLACEMENT_NAME} --for=condition=PlacementSatisfied"
 
     export PLACEMENT_NAME
-    envsubst < ${DEMO_DIR}/manifests/application/mwrs-pull-images.yaml | kubectl apply -f -
+    envsubst <${DEMO_DIR}/manifests/application/mwrs-pull-images.yaml | kubectl apply -f -
 }
 
-function getPlacementResults(){
+function getPlacementResults() {
     placement_name=$1
     if [ -z "$placement_name" ]; then
         echo "placement_name is required"
@@ -223,7 +220,7 @@ function getPlacementResults(){
     echo "${clusters}"
 }
 
-function getAddonPlacementScores(){
+function getAddonPlacementScores() {
     # local clusters=$(kubectl get addonplacementscores -A | grep -v NAMESPACE | awk '{print $1}')
 
     # for current_cluster in ${clusters}; do
@@ -239,17 +236,17 @@ function getAddonPlacementScores(){
     pe 'echo -e "CLUSTER\t\tGPU_AVAILABLE_SCORE" && kubectl get addonplacementscores -A -o json | jq -r '\''.items[] | {cluster: .metadata.namespace, gpuAvailable: (.status.scores[] | select(.name == "gpuAvailable") | .value)} | "\(.cluster)\t\(.gpuAvailable)"'\'''
 }
 
-function showmwstatus(){
+function showmwstatus() {
     pei 'echo -e "CLUSTER\t\tAPPLIED\t\tNAME" && kubectl get manifestwork -A --field-selector metadata.name!=addon-fluid-deploy-0,metadata.name!=addon-resource-usage-collect-deploy-0 -o json | jq -r '\''.items[] | {cluster: .metadata.namespace, name: .metadata.name, applied: (.status.conditions[] | select(.type == "Applied") | .status)} | "\(.cluster)\t\(.applied)\t\t\(.name)"'\'''
 }
 
-function saveHubCA(){
-    kubectl get configmap kube-root-ca.crt -ojsonpath='{.data.ca\.crt}' > ${DEMO_DIR}/credentials/hub-ca.crt
+function saveHubCA() {
+    kubectl get configmap kube-root-ca.crt -ojsonpath='{.data.ca\.crt}' >${DEMO_DIR}/credentials/hub-ca.crt
     local hub_apiserver_url=$(kubectl get infrastructures.config.openshift.io cluster -ojsonpath={.status.apiServerURL})
-    echo "HUB_API_SERVER=${hub_apiserver_url}" > ${DEMO_DIR}/credentials/hub-url.txt
+    echo "HUB_API_SERVER=${hub_apiserver_url}" >${DEMO_DIR}/credentials/hub-url.txt
 }
 
-function saveGKEcredentials(){
+function saveGKEcredentials() {
     local index=$1
     if [ -z "$index" ]; then
         echo "index is required"
@@ -275,11 +272,11 @@ function saveGKEcredentials(){
     export KUBECONFIG=${HUB_KUBECONFIG}
 }
 
-function hubInit(){
+function hubInit() {
     clusteradm init --wait --feature-gates=ManifestWorkReplicaSet=true --bundle-version='latest'
 }
 
-function join(){
+function join() {
     local cluster_name=$1
     if [ -z "$cluster-name" ]; then
         echo "cluster-name is required"
@@ -296,11 +293,11 @@ function join(){
 
     export KUBECONFIG=${managed_kubeconfig}
     clusteradm join --hub-token ${token} \
-    --hub-apiserver ${HUB_API_SERVER} \
-    --ca-file=/home/go/src/github.com/zhujian7/demo-magic/ocm-fluid/credentials/hub-ca.crt \
-    --bundle-version='latest' \
-    --singleton \
-    --wait --cluster-name ${cluster_name}
+        --hub-apiserver ${HUB_API_SERVER} \
+        --ca-file=/home/go/src/github.com/zhujian7/demo-magic/ocm-fluid/credentials/hub-ca.crt \
+        --bundle-version='latest' \
+        --singleton \
+        --wait --cluster-name ${cluster_name}
 
     export KUBECONFIG=${HUB_KUBECONFIG}
     kubectl get managedcluster
@@ -317,12 +314,12 @@ function join(){
     kubectl get managedcluster
 }
 
-function deploySubmariner(){
+function deploySubmariner() {
     subctl deploy-broker --kubeconfig ${HUB_KUBECONFIG}
     # subctl join --kubeconfig <PATH-TO-JOINING-CLUSTER> broker-info.subm --clusterid <ID>
 }
 
-function joinSubmariner(){
+function joinSubmariner() {
     local cluster_name=$1
     if [ -z "$cluster-name" ]; then
         echo "cluster-name is required"
@@ -337,12 +334,12 @@ function joinSubmariner(){
     subctl join --kubeconfig ${managed_kubeconfig} broker-info.subm --clusterid ${cluster_name}
 }
 
-function createGKEFirewall(){
+function createGKEFirewall() {
     gcloud compute firewall-rules create "zj-allow-tcp-in" --allow=tcp \
-      --direction=IN --source-ranges=34.118.224.0/20,10.124.0.0/14,10.4.0.0/20,10.0.0.0/14
+        --direction=IN --source-ranges=34.118.224.0/20,10.124.0.0/14,10.4.0.0/20,10.0.0.0/14
 
     gcloud compute firewall-rules create "zj-allow-tcp-out" --allow=tcp --direction=OUT \
-      --destination-ranges=34.118.224.0/20,10.124.0.0/14,10.4.0.0/20,10.0.0.0/14
+        --destination-ranges=34.118.224.0/20,10.124.0.0/14,10.4.0.0/20,10.0.0.0/14
 
     gcloud compute firewall-rules create "zj-udp-in-500" --allow=udp:500 --direction=IN
     gcloud compute firewall-rules create "zj-udp-in-4500" --allow=udp:4500 --direction=IN
@@ -353,7 +350,7 @@ function createGKEFirewall(){
     gcloud compute firewall-rules create "zj-udp-out-4800" --allow=udp:4800 --direction=OUT
 }
 
-function deleteGKEFirewall(){
+function deleteGKEFirewall() {
     gcloud compute firewall-rules delete "zj-allow-tcp-in"
     gcloud compute firewall-rules delete "zj-allow-tcp-out"
 
@@ -366,8 +363,8 @@ function deleteGKEFirewall(){
     gcloud compute firewall-rules delete "zj-udp-out-4800"
 }
 
-function addSCC(){
-    oc apply -f- << EOF
+function addSCC() {
+    oc apply -f- <<EOF
     apiVersion: security.openshift.io/v1
     kind: SecurityContextConstraints
     metadata:
@@ -403,7 +400,7 @@ EOF
     oc adm policy add-scc-to-user anyuid -z fluid-webhook -n fluid-system
 }
 
-function main(){
+function main() {
     p "# This demo will use placment API to select clusters with most available GPU resources, and deploy an AI application with fluid dataset and dataflow to the selected clusters."
     p "# OCM is installed with 4 managed clusters, 2 GKE clusters, and 2 other clusters"
     pe "kubectl get managedcluster"
@@ -437,54 +434,53 @@ function main(){
 
 # Function for the 'help' subcommand
 help() {
-  echo "Usage: $0 {setup-env|enable-addons|deploy-ai-app|deploy-app|all|call|help}"
-  echo "setup-env     - Sep up the environment with 3 kind clusters"
-  echo "enable-addons - Enable resource-usage-collect, fluid addons"
-  echo "deploy-ai-app - Deploy an AI demo application with GPU and fluid dataset"
-  echo "deploy-app    - Deploy an demo application"
-  echo "all           - Run all the above commands in sequence"
-  echo "call          - Call a specific function"
-  echo "help          - Display this help message"
-  echo "Note: If you are trying to use the fluid dataset, please make sure the AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment variables are set."
+    echo "Usage: $0 {setup-env|enable-addons|deploy-ai-app|deploy-app|all|call|help}"
+    echo "setup-env     - Sep up the environment with 3 kind clusters"
+    echo "enable-addons - Enable resource-usage-collect, fluid addons"
+    echo "deploy-ai-app - Deploy an AI demo application with GPU and fluid dataset"
+    echo "deploy-app    - Deploy an demo application"
+    echo "all           - Run all the above commands in sequence"
+    echo "call          - Call a specific function"
+    echo "help          - Display this help message"
+    echo "Note: If you are trying to use the fluid dataset, please make sure the AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment variables are set."
 }
-
 
 # Check if at least one argument is provided
 if [ $# -lt 1 ]; then
-  echo "Error: No subcommand provided."
-  help
-  exit 1
+    echo "Error: No subcommand provided."
+    help
+    exit 1
 fi
 
 # Parse the first argument as the subcommand
 case "$1" in
-  setup-env)
+setup-env)
     setUpEnvironment
     createPlacements
     loadImages
     ;;
-  enable-addons)
-    createPlacements > /dev/null 2>&1
+enable-addons)
+    createPlacements >/dev/null 2>&1
     enableResourceUsageCollectAddons
     enableFluidAddons
-    createImagePullJobs > /dev/null 2>&1
+    createImagePullJobs >/dev/null 2>&1
     ;;
-  deploy-app)
-    createPlacements > /dev/null 2>&1
+deploy-app)
+    createPlacements >/dev/null 2>&1
     enableAppAddons
     installNginx
     ;;
-  deploy-ai-app)
+deploy-ai-app)
     # createPlacements > /dev/null 2>&1
     createFluidDataset
     # createFluidDataLoad
     # createGPUApp
     createFluidDataFlow
     ;;
-  main)
+main)
     main
     ;;
-  all)
+all)
     setUpEnvironment
     createPlacements
     loadImages
@@ -497,15 +493,15 @@ case "$1" in
     # createGPUApp
     createFluidDataFlow
     ;;
-  help)
+help)
     help
     ;;
-  call)
-    createPlacements > /dev/null 2>&1
+call)
+    createPlacements >/dev/null 2>&1
     shift
     $@
     ;;
-  *)
+*)
     echo "Error: Unknown subcommand '$1'."
     help
     exit 1
@@ -517,7 +513,7 @@ exit 0
 # ########################################################################################
 # Create a GKE cluster: 1 Node, "e2-standard-8   us-central1-c"
 #                       1 Node, "n1-standard-8" with NVIDIA T4 GPU
-# 
+#
 # ########################################################################################
 
 gcloud container clusters delete ${GKE_CLUSTER_NAME} --zone ${GKE_ZONE}
@@ -526,7 +522,6 @@ export GKE_CLUSTER_NAME="zj-cluster-1"
 export GKE_ZONE="us-central1-c"
 export GKE_CLUSTER_NAME="zj-cluster-2"
 export GKE_ZONE="us-east1-c"
-
 
 gcloud container clusters create ${GKE_CLUSTER_NAME} \
     --zone ${GKE_ZONE} \
@@ -539,8 +534,8 @@ gcloud container node-pools create gpu-pool \
     --machine-type=n1-standard-8 \
     --num-nodes=1 \
     --accelerator type=nvidia-tesla-t4,count=1,gpu-driver-version=default
-    # --accelerator type=nvidia-tesla-t4,count=1,gpu-driver-version=latest
-    # --machine-type=n1-standard-2 \
+# --accelerator type=nvidia-tesla-t4,count=1,gpu-driver-version=latest
+# --machine-type=n1-standard-2 \
 
 gcloud container node-pools create default-pool \
     --cluster=${GKE_CLUSTER_NAME} \
@@ -552,7 +547,6 @@ gcloud container node-pools delete gpu-pool \
     --cluster=${GKE_CLUSTER_NAME} \
     --zone ${GKE_ZONE}
 
-
 ######
 
 gcloud container clusters create zj-cluster-1 \
@@ -561,21 +555,20 @@ gcloud container clusters create zj-cluster-1 \
     --num-nodes=1 \
     --enable-ip-alias \
     --network "default"
-    # --cluster-ipv4-cidr "10.0.0.0/14" \
-    # --services-ipv4-cidr="10.4.0.0/20" \
-    # --username "admin" \
-    # --image-type "UBUNTU" \
+# --cluster-ipv4-cidr "10.0.0.0/14" \
+# --services-ipv4-cidr="10.4.0.0/20" \
+# --username "admin" \
+# --image-type "UBUNTU" \
 
 gcloud container clusters create zj-cluster-2 \
-    --zone us-east1-c\
-    --machine-type=e2-standard-8 \
+    --zone us-east1-c --machine-type=e2-standard-8 \
     --num-nodes=1 \
     --enable-ip-alias \
     --cluster-ipv4-cidr "10.124.0.0/14" \
     --services-ipv4-cidr="34.118.224.0/20" \
     --network "default"
-    # --cluster-ipv4-cidr "10.8.0.0/14" \   10.124.0.0/14
-    # --services-ipv4-cidr="10.12.0.0/20" \ 34.118.224.0/20
+# --cluster-ipv4-cidr "10.8.0.0/14" \   10.124.0.0/14
+# --services-ipv4-cidr="10.12.0.0/20" \ 34.118.224.0/20
 
 # ocm hub
 #        Service CIDRs:   [172.30.0.0/16]
