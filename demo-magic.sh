@@ -244,6 +244,9 @@ while getopts ":dhncw:" opt; do
   esac
 done
 
+# Shift parsed options away, leaving only subcommand arguments
+shift $((OPTIND-1))
+
 ##
 # Do not check for pv. This trusts the user to not set TYPE_SPEED later in the
 # demo in which case an error will occur if pv is not installed.
