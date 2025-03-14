@@ -1,0 +1,19 @@
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: oidc-discovery 
+  namespace: spire
+spec:
+  host: oidc-discovery.${APP_DOMAIN}
+  port:
+    targetPort: https
+  tls:
+    insecureEdgeTerminationPolicy: Redirect
+    #termination: reencrypt
+    #termination: edge
+    termination: passthrough
+  to:
+    kind: Service
+    name: spire-oidc
+    weight: 100
+  wildcardPolicy: None
