@@ -41,24 +41,29 @@ clear
 
 source ${DEMO_DIR}/config/variable.txt
 
-HUB_KUBECONFIG="${KUBECONFIG:=${DEMO_DIR}/credentials/ocm-hub.kubeconfig}"
-KIND_KUBECONFIG="${DEMO_DIR}/manifests/credentials/kind.kubeconfig"
+HUB_KUBECONFIG="${KUBECONFIG:=${DEMO_DIR}/credentials/ocm_hub.kubeconfig}"
+KIND_KUBECONFIG="${KIND_KUBECONFIG:=${DEMO_DIR}/manifests/credentials/kind.kubeconfig}"
+KEYCLOAK_CLIENT_KUBECONFIG="${KEYCLOAK_CLIENT_KUBECONFIG:=${DEMO_DIR}/manifests/credentials/keycloak_client.kubeconfig}"
 OIDC_PROVIDER_CA_PATH="${DEMO_DIR}/manifests/credentials/oidc_ca.crt"
 CLIENT_TOKEN_PATH="${DEMO_DIR}/manifests/credentials/client_token"
 echo "HUB_KUBECONFIG: ${HUB_KUBECONFIG}"
 echo "KIND_KUBECONFIG: ${KIND_KUBECONFIG}"
+# echo "KEYCLOAK_CLIENT_KUBECONFIG: ${KEYCLOAK_CLIENT_KUBECONFIG}"
 echo "OIDC_PROVIDER_CA_PATH: ${OIDC_PROVIDER_CA_PATH}"
 
 function init() {
     echo "Extract the app domain name, cluster hostname, and oidc provider address"
     export APP_DOMAIN=$(oc get cm -n openshift-config-managed console-public -o go-template="{{ .data.consoleURL }}" | sed 's@https://@@; s/^[^.]*\.//')
-    echo "APP_DOMAIN: $APP_DOMAIN"
+    echo "APP_DOMAIN: ${APP_DOMAIN}"
 
-    export CLUSTER_HOSTNAME=$(echo "$APP_DOMAIN" | awk -F'.' '{print $2}')
-    echo "CLUSTER_HOSTNAME: $CLUSTER_HOSTNAME"
+    export CLUSTER_HOSTNAME=$(echo "${APP_DOMAIN}" | awk -F'.' '{print $2}')
+    echo "CLUSTER_HOSTNAME: ${CLUSTER_HOSTNAME}"
 
-    export OIDC_SERVER=oidc-discovery.$APP_DOMAIN
-    echo "OIDC_SERVER: $OIDC_SERVER"
+    export OIDC_SERVER=oidc-discovery.${APP_DOMAIN}
+    echo "OIDC_SERVER: ${OIDC_SERVER}"
+
+    export KEYCLOAK_SERVER=keycloak.${APP_DOMAIN}
+    echo "KEYCLOAK_SERVER: ${KEYCLOAK_SERVER}"
 
     export OIDC_PROVIDER_CA_PATH
 }
@@ -191,6 +196,50 @@ function show_kind_api_server_logs() {
 
 function show_openid_config() {
     pe "curl https://${OIDC_SERVER}/.well-known/openid-configuration"
+}
+
+function install_keycloak() {
+    echo 'Ensure the keycloak operator is installed in the "keycloak" namespace, if not you can install it from the ocp console'
+    # p "Create the keycloak key and cert"
+    # envsubst <${DEMO_DIR}/manifests/keycloak/openssl.cnf | openssl req -new -newkey rsa:2048 -days 365 -nodes -x509 \
+    #     -keyout ${DEMO_DIR}/manifests/credentials/keycloak/key.pem -out ${DEMO_DIR}/manifests/credentials/keycloak/certificate.pem -config -
+
+    pe "envsubst <${DEMO_DIR}/manifests/keycloak/keycloak.yaml | kubectl apply -f -"
+    pe "kubectl create secret tls keycloak-tls-secret -n keycloak \
+        --cert ${DEMO_DIR}/manifests/credentials/keycloak/certificate.pem \
+        --key ${DEMO_DIR}/manifests/credentials/keycloak/key.pem"
+
+    echo "--------------------------------------------------"
+    echo "Keycloak installed"
+    echo "URL: https://${KEYCLOAK_SERVER}"
+    echo "You can get the initial login credential by:"
+    echo "  kubectl get secret -n keycloak my-keycloak-initial-admin -o jsonpath='{.data.password}' | base64 -d"
+    echo "  the initial username is temp-admin"
+    echo "--------------------------------------------------"
+}
+
+function set_up_keycloak_client() {
+    echo '1. login to the keycloak console'
+    echo '2. create a realm ${KEYCLOAK_REALM_NAME}, eg: ocm'
+    echo '3. Click "Client" to create a keycloak client, Set "Client ID" to ${KEYCLOAK_OIDC_CLIENT_ID}, eg: ocp-test, enable "Client authtication",
+          Provide the Valid redirect URIs: "https://oauth-openshift.apps.<client-cluster-host>.dev04.red-chesterfield.com/oauth2callback/*"'
+    echo '4. Click "Users" -> "Add user"'
+    echo '5. After the user created, click "Credentials" to create a password for the user'
+}
+
+function configure_keycloak_as_oidc_provider() {
+    if [ -z "${KEYCLOAK_OIDC_CLIENT_SECRET}" ]; then
+        echo "KEYCLOAK_OIDC_CLIENT_SECRET is not set or empty"
+        exit 1
+    fi
+    p "Configure keycloak as the oidc provider, keycloak realm name: ${KEYCLOAK_REALM_NAME}, oidc client id: ${KEYCLOAK_OIDC_CLIENT_ID}"
+    pei "oc --kubeconfig=${KEYCLOAK_CLIENT_KUBECONFIG} create configmap -n openshift-config openid-ca-keycloak --from-file=ca.crt=${DEMO_DIR}/manifests/credentials/keycloak/certificate.pem"
+    pei "oc --kubeconfig=${KEYCLOAK_CLIENT_KUBECONFIG} create secret generic -n openshift-config openid-client-secret-keycloak --from-literal=clientSecret=${KEYCLOAK_OIDC_CLIENT_SECRET}"
+    pei "envsubst <${DEMO_DIR}/manifests/keycloak/oauth.yaml | oc --kubeconfig=${KEYCLOAK_CLIENT_KUBECONFIG} apply -f -"
+
+    p "Check the oauth configure status"
+    pei "oc --kubeconfig=${KEYCLOAK_CLIENT_KUBECONFIG} get oauth cluster -oyaml"
+    pei "oc --kubeconfig=${KEYCLOAK_CLIENT_KUBECONFIG} get clusteroperators.config.openshift.io authentication -oyaml"
 }
 
 function main() {
