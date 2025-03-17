@@ -16,9 +16,9 @@ spec:
         - name
         preferredUsername:
         - preferred_username
-      clientID: ocm
+      clientID: ${KEYCLOAK_OIDC_CLIENT_ID}
       clientSecret:
         name: openid-client-secret-keycloak
       extraScopes: []
-      issuer: https://${KEYCLOAK_SERVER}/realms/ocm
+      issuer: https://${KEYCLOAK_SERVER}/realms/${KEYCLOAK_REALM_NAME}
     type: OpenID
