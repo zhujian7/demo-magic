@@ -4,7 +4,7 @@ metadata:
   name: oidc-discovery 
   namespace: spire
 spec:
-  host: oidc-discovery.${APP_DOMAIN}
+  host: ${OIDC_SERVER}
   port:
     targetPort: https
   tls:

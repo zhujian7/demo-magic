@@ -1,3 +1,8 @@
 KEYCLOAK_OIDC_CLIENT_ID=ocp-test
 KEYCLOAK_REALM_NAME=ocm
 KEYCLOAK_USER=ktest
+
+SPIRE_LOCAL_DATA_DIR=/Users/jiazhu/tmp/spire
+SPIRE_AGENT_BIN=/Users/jiazhu/go/src/github.com/spiffe/spire/bin/spire-agent
+SPIRE_LOCAL_SOCKET_PATH=/tmp/spire-agent/public/api.sock
+

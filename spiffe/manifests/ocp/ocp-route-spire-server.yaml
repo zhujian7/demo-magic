@@ -1,0 +1,27 @@
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: spire-server 
+  namespace: spire
+spec:
+  host: ${SPIRE_SERVER}
+  port:
+    # targetPort: https
+    targetPort: 8081
+  tls:
+    # insecureEdgeTerminationPolicy: Redirect
+    insecureEdgeTerminationPolicy: None
+    #termination: reencrypt
+    # termination: edge
+    termination: passthrough
+  to:
+    kind: Service
+    name: spire-server
+    weight: 100
+  wildcardPolicy: None
+
+
+## TEST COMMAND
+## grpcurl -insecure -v spire-server.apps.server-foundation-sno-lite-bdh5w.dev04.red-chesterfield.com:443 list
+##  1. use grpcurl, not curl
+##  2. no https:// or http://

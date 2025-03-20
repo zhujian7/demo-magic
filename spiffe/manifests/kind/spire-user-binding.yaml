@@ -9,3 +9,5 @@ roleRef:
 subjects:
 - kind: User
   name: https://${OIDC_SERVER}#spiffe://${APP_DOMAIN}/ns/default/sa/default 
+- kind: User
+  name: https://${OIDC_SERVER}#spiffe://${APP_DOMAIN}/host/mac/user/${USER_NAME}
