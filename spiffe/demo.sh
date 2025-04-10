@@ -75,6 +75,7 @@ function init() {
     echo "KEYCLOAK_SERVER: ${KEYCLOAK_SERVER}"
 
     export OIDC_PROVIDER_CA_PATH
+    export KEYCLOAK_CERT_PATH
 
     USER_ID=$(id -u)
     USER_NAME=$(id -un)
@@ -107,6 +108,8 @@ function deploy_spire_server_with_oidc_provider() {
     p "Expose the spire oidc provider via the OCP route"
     pei "envsubst < ${DEMO_DIR}/manifests/ocp/ocp-route-oidc-provider.yaml | kubectl apply -f -"
     p "Expose the spire server via the OCP route"
+    # Use "grpcurl -insecure -v -max-time 240 spire-server.apps.server-foundation-sno-lite-bdh5w.dev04.red-chesterfield.com list" to test if the server expose successfully
+    # it should return "Failed to list services: server does not support the reflection API"
     pei "envsubst < ${DEMO_DIR}/manifests/ocp/ocp-route-spire-server.yaml | kubectl apply -f -"
 }
 
@@ -140,6 +143,11 @@ function deploy_spire_local_agent() {
         -spiffeID spiffe://${APP_DOMAIN}/host/mac/user/${USER_NAME} \
         -selector unix:uid:${USER_ID}"
 
+    # If failed with error:
+    # ERRO[0030] Agent crashed error="create attestation client: failed to dial dns:///spire-server.apps.server-foundation-sno-lite-g5lj5.dev04.red-chesterfield.com:443:
+    #   context deadline exceeded: connection error: desc = \"transport: authentication handshake failed: x509svid: could not verify leaf certificate: x509:
+    #   certificate signed by unknown authority (possibly because of \\\"crypto/rsa: verification error\\\" while trying to verify candidate authority certificate \\\"SPIFFE\\\")\""
+    # we can delete the agent.data_dir, and recreate it to fix
 }
 
 function register_workloads() {
@@ -222,7 +230,8 @@ function set_spire_kubeconfig() {
     pei "kubectl --kubeconfig=${SPIRE_KIND_KUBECONFIG} --context kind-spire-client config set-context my-oidc --cluster=kind-spire-client --user=oidc-user"
 
     p "render the spire_fetch_token file and copy it into PATH"
-    pei "envsubst '${SPIRE_AGENT_BIN} ${SPIRE_LOCAL_SOCKET_PATH}' <${DEMO_DIR}/manifests/kind/spire_fetch_token.sh > $HOME/local/bin/spire_fetch_token.sh"
+    echo 'envsubst <${DEMO_DIR}/manifests/kind/spire_fetch_token.sh > $HOME/local/bin/spire_fetch_token.sh'
+    envsubst '${SPIRE_AGENT_BIN} ${SPIRE_LOCAL_SOCKET_PATH}' <${DEMO_DIR}/manifests/kind/spire_fetch_token.sh >$HOME/local/bin/spire_fetch_token.sh
     pei "chmod +x $HOME/local/bin/spire_fetch_token.sh"
     pei "kubectl --kubeconfig=${SPIRE_KIND_KUBECONFIG} --context kind-spire-client config set-credentials oidc-login --exec-api-version=client.authentication.k8s.io/v1 \
         --exec-command=spire_fetch_token.sh \
@@ -234,8 +243,13 @@ function set_spire_kubeconfig() {
 }
 
 function refresh_spire_kind_kubeconfig() {
-    # get_client_token
-    get_local_client_token
+    enable_local_agent=$1
+    if [ "$enable_local_agent" = true ]; then
+        get_local_client_token
+    else
+        get_client_token
+    fi
+    # get_local_client_token
     set_spire_kubeconfig
     check_spire_kind_kubeconfig
 }
@@ -259,10 +273,14 @@ function show_openid_config() {
 }
 
 function install_keycloak() {
-    echo 'Ensure the keycloak operator is installed in the "keycloak" namespace, if not you can install it from the ocp console'
-    # p "Create the keycloak key and cert"
-    # envsubst <${DEMO_DIR}/manifests/keycloak/openssl.cnf | openssl req -new -newkey rsa:2048 -days 365 -nodes -x509 \
-    #     -keyout ${KEYCLOAK_KEY_PATH} -out ${KEYCLOAK_CERT_PATH} -config -
+    echo 'Ensure the keycloak operator(community version) is installed in the "keycloak" namespace, if not you can install it from the ocp console, no keycloak instance required.'
+
+    first_install=$1
+    if [ "$first_install" = true ]; then
+        p "Create the keycloak key and cert"
+        envsubst <${DEMO_DIR}/manifests/keycloak/openssl.cnf | openssl req -new -newkey rsa:2048 -days 365 -nodes -x509 \
+            -keyout ${KEYCLOAK_KEY_PATH} -out ${KEYCLOAK_CERT_PATH} -config -
+    fi
 
     pe "envsubst <${DEMO_DIR}/manifests/keycloak/keycloak.yaml | kubectl apply -f -"
     pe "kubectl create secret tls keycloak-tls-secret -n keycloak \
@@ -279,15 +297,15 @@ function install_keycloak() {
 }
 
 function set_up_keycloak_client() {
-    echo '1. login to the keycloak console'
-    echo '2. create a realm ${KEYCLOAK_REALM_NAME}, eg: ocm'
+    echo '1. Login to the keycloak console'
+    echo '2. Create a realm ${KEYCLOAK_REALM_NAME}, eg: ocm'
     echo '3. Click "Client" to create a keycloak client, Set "Client ID" to ${KEYCLOAK_OIDC_CLIENT_ID}, eg: ocp-test, enable "Client authtication",
           Provide the Valid redirect URIs: "https://oauth-openshift.apps.<client-cluster-host>.dev04.red-chesterfield.com/oauth2callback/*"'
     echo '4. Click "Users" -> "Add user"'
     echo '5. After the user created, click "Credentials" to create a password for the user'
 }
 
-function configure_keycloak_as_oidc_provider() {
+function configure_keycloak_as_oidc_provider_for_ocp() {
     if [ -z "${KEYCLOAK_OIDC_CLIENT_SECRET}" ]; then
         echo "KEYCLOAK_OIDC_CLIENT_SECRET is not set or empty"
         exit 1
@@ -306,15 +324,16 @@ function configure_keycloak_as_oidc_provider() {
 function set_up_keycloak_oidc_plugin_client() {
     set_up_keycloak_client
 
-    echo '6. create client scope "groups", enable "Include in token scope"'
-    echo '7. create a mapper for the client scope "groups", "Configure a new mapper" -> "Group Membership", "Token Claim Name" should be "groups", enable "Add to access token", disable "Full group path"(otherwise, the groups you got would be "/k8s-admins")'
-    echo '8. add "http://localhost:8000/*" into the the "Valid redirect URIs" for the keycloak client created at step 3'
-    echo '9. enable the "groups" client scope for the client'
-    echo '10. create a group "k8s-admins"'
-    echo '11. join the user created at step 4 to the group "k8s-admins"'
+    echo '6. Create "Client scopes" named "groups", enable "Include in token scope"'
+    echo '7. Create a mapper for the client scope "groups", "Configure a new mapper" -> "Group Membership", "Token Claim Name" should be "groups", enable "Add to access token", disable "Full group path"(otherwise, the groups you got would be "/k8s-admins")'
+    echo '8. Add "http://localhost:8000/*" into the the "Valid redirect URIs" for the keycloak client created at step 3'
+    echo '9. Enable the "groups" client scope for the client', "Clients", "Add client scope", choose "groups", add as "Default"
+    echo '10. Create a group "k8s-admins", click "Groups", create group'
+    echo '11. Join the user created at step 4 to the group "k8s-admins"'
 }
 
 function create_keycloak_kind_cluster() {
+    envsubst <${DEMO_DIR}/manifests/kind/cluster-config-keycloak.yaml
     pe "envsubst < ${DEMO_DIR}/manifests/kind/cluster-config-keycloak.yaml | kind create cluster --name keycloak-client \
        --kubeconfig=${KEYCLOAK_KIND_KUBECONFIG} --config -"
 }
@@ -333,26 +352,49 @@ function set_keycloak_kubeconfig() {
         config set-credentials keycloak-oidc-login --exec-api-version=client.authentication.k8s.io/v1beta1 \
         --exec-command=kubectl --exec-arg=oidc-login --exec-arg=get-token \
         --exec-arg=--oidc-issuer-url=https://${KEYCLOAK_SERVER}/realms/${KEYCLOAK_REALM_NAME} \
-        --exec-arg=--oidc-client-id=ocp-test --exec-arg=--oidc-extra-scope="groups email openid" \
+        --exec-arg=--oidc-client-id=${KEYCLOAK_OIDC_CLIENT_ID} --exec-arg=--oidc-extra-scope="groups email openid" \
         --exec-arg=--oidc-client-secret=${KEYCLOAK_OIDC_CLIENT_SECRET} --exec-arg=--insecure-skip-tls-verify
 
     pei "kubectl --kubeconfig=${KEYCLOAK_KIND_KUBECONFIG} --context kind-keycloak-client config set-context keyclock-oidc --cluster=kind-keycloak-client --user=keycloak-oidc-login"
-    pe "kubectl --kubeconfig=${KEYCLOAK_KIND_KUBECONFIG} --context kind-keycloak-client get ns"
+    pe "kubectl --kubeconfig=${KEYCLOAK_KIND_KUBECONFIG} --context keyclock-oidc get ns"
+    pe "oc --kubeconfig=${KEYCLOAK_KIND_KUBECONFIG} --context keyclock-oidc whoami"
+
+    # "oc oidc-login clean" can be used to cleanup the login cache
 }
 
 function create_spire_kind_cluster_from_scratch() {
+    enable_local_agent=$1
     prepare_oidc_ca
     create_spire_kind_cluster
-    refresh_spire_kind_kubeconfig
+    refresh_spire_kind_kubeconfig $enable_local_agent
 }
 
 function main() {
+    enable_local_agent=true
     init
+
     deploy_spire_on_ocp
+
+    if [ "$enable_local_agent" = true ]; then
+        deploy_spire_local_agent
+    fi
+
     register_workloads
     create_client
 
-    create_spire_kind_cluster_from_scratch
+    create_spire_kind_cluster_from_scratch $enable_local_agent
+    return
+}
+
+function main_keycloak() {
+    init
+
+    # first_install=true
+    install_keycloak $first_install
+    set_up_keycloak_oidc_plugin_client
+    create_keycloak_kind_cluster
+    set_keycloak_kubeconfig
+
     return
 }
 
@@ -361,6 +403,7 @@ help() {
     echo "Usage: $0 {setup-env|enable-addons|deploy-ai-app|deploy-app|all|call|help}"
     echo "deploy        - Deploy spire server(with oidc provider), and spire agent"
     echo "main          - Deploy spire server(with oidc provider), and spire agent; then create a kind cluster using the oidc provider"
+    echo "main_keycloak - Deploy keycloak server; then create a kind cluster using the keycloak as the oidc provider"
     echo "call          - Call a specific function"
     echo "help          - Display this help message"
     echo "Note: kubectl is required, the KUBECONFIG env must be set."
@@ -381,6 +424,9 @@ deploy)
     ;;
 main)
     main
+    ;;
+main_keycloak)
+    main_keycloak
     ;;
 help)
     help
