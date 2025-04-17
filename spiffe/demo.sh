@@ -62,10 +62,18 @@ function init() {
     export APP_DOMAIN=$(oc get cm -n openshift-config-managed console-public -o go-template="{{ .data.consoleURL }}" | sed 's@https://@@; s/^[^.]*\.//')
     echo "APP_DOMAIN: ${APP_DOMAIN}"
 
-    export CLUSTER_HOSTNAME=$(echo "${APP_DOMAIN}" | awk -F'.' '{print $2}')
-    echo "CLUSTER_HOSTNAME: ${CLUSTER_HOSTNAME}"
+    # export CLUSTER_HOSTNAME=$(echo "${APP_DOMAIN}" | awk -F'.' '{print $2}')
+    # echo "CLUSTER_HOSTNAME: ${CLUSTER_HOSTNAME}"
+    echo "change APP DOMAIN to dev04.red-chesterfield.com"
+    export APP_DOMAIN="dev04.red-chesterfield.com"
+    # 2 DNS records should be created in the dev04.red-chesterfield.com hosted zone:
+    #     https://us-east-1.console.aws.amazon.com/route53/v2/hostedzones?region=us-east-1#ListRecordSets/ZFP9SSI87WSM4
+    #   - oidc-discovery.dev04.red-chesterfield.com: Type: A, Alias: Yes, Route traffic to "Alias to Application and Classic Load Balancer",
+    #     Value: ""<hostname>.", hostname can be gotten by "oc get svc router-default -n openshift-ingress -ojsonpath={.status.loadBalancer.ingress}"
+    #     Evaluate target health: No
+    #   - spire-server.dev04.red-chesterfield.com
 
-    export OIDC_SERVER=oidc-discovery.${APP_DOMAIN}
+    export OIDC_SERVER=spire-oidc-discovery.${APP_DOMAIN}
     echo "OIDC_SERVER: ${OIDC_SERVER}"
 
     export SPIRE_SERVER=spire-server.${APP_DOMAIN}
@@ -108,7 +116,7 @@ function deploy_spire_server_with_oidc_provider() {
     p "Expose the spire oidc provider via the OCP route"
     pei "envsubst < ${DEMO_DIR}/manifests/ocp/ocp-route-oidc-provider.yaml | kubectl apply -f -"
     p "Expose the spire server via the OCP route"
-    # Use "grpcurl -insecure -v -max-time 240 spire-server.apps.server-foundation-sno-lite-bdh5w.dev04.red-chesterfield.com list" to test if the server expose successfully
+    # Use "grpcurl -insecure -v -max-time 240 spire-server.apps.server-foundation-sno-lite-bdh5w.dev04.red-chesterfield.com:443 list" to test if the server expose successfully
     # it should return "Failed to list services: server does not support the reflection API"
     pei "envsubst < ${DEMO_DIR}/manifests/ocp/ocp-route-spire-server.yaml | kubectl apply -f -"
 }
@@ -188,6 +196,7 @@ function prepare_oidc_ca() {
 }
 
 function create_spire_kind_cluster() {
+    envsubst <${DEMO_DIR}/manifests/kind/cluster-config.yaml
     pe "envsubst < ${DEMO_DIR}/manifests/kind/cluster-config.yaml | kind create cluster --name spire-client \
        --kubeconfig=${SPIRE_KIND_KUBECONFIG} --config -"
 }
@@ -280,12 +289,12 @@ function install_keycloak() {
         p "Create the keycloak key and cert"
         envsubst <${DEMO_DIR}/manifests/keycloak/openssl.cnf | openssl req -new -newkey rsa:2048 -days 365 -nodes -x509 \
             -keyout ${KEYCLOAK_KEY_PATH} -out ${KEYCLOAK_CERT_PATH} -config -
-    fi
 
-    pe "envsubst <${DEMO_DIR}/manifests/keycloak/keycloak.yaml | kubectl apply -f -"
-    pe "kubectl create secret tls keycloak-tls-secret -n keycloak \
+        pe "envsubst <${DEMO_DIR}/manifests/keycloak/keycloak.yaml | kubectl apply -f -"
+        pe "kubectl create secret tls keycloak-tls-secret -n keycloak \
         --cert ${KEYCLOAK_CERT_PATH} \
         --key ${KEYCLOAK_KEY_PATH}"
+    fi
 
     echo "--------------------------------------------------"
     echo "Keycloak installed"

@@ -7,17 +7,17 @@ kubeadmConfigPatches:
     extraArgs:
       oidc-client-id: kube
       oidc-issuer-url: https://${OIDC_SERVER}
-      #oidc-issuer-url: ${OIDC_SERVER}
+      # oidc-issuer-url: https://spire-oidc-discovery.dev04.red-chesterfield.com
       oidc-username-claim: sub
       oidc-groups-claim: groups
-      oidc-ca-file: /etc/ca-certificates/spiffe/root-ca.pem 
+      # oidc-ca-file: /etc/ca-certificates/spiffe/root-ca.pem
 nodes:
 - role: control-plane
   image: docker.io/kindest/node:v1.30.0
-  extraMounts:
-  - hostPath: ${OIDC_PROVIDER_CA_PATH}
-    containerPath: /etc/ca-certificates/spiffe/root-ca.pem
-    readOnly: true
+  # extraMounts:
+  # - hostPath: ${OIDC_PROVIDER_CA_PATH}
+  #   containerPath: /etc/ca-certificates/spiffe/root-ca.pem
+  #   readOnly: true
 - role: worker
   image: docker.io/kindest/node:v1.30.0
 
