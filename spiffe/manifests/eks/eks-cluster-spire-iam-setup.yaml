@@ -1,0 +1,17 @@
+apiVersion: eksctl.io/v1alpha5
+kind: ClusterConfig
+
+metadata:
+  name: zj-spire-test
+  region: us-east-1
+
+identityProviders:
+  - name: spire
+    type: oidc
+    issuerUrl: https://spire-oidc-discovery.dev04.red-chesterfield.com
+    clientId: kube
+    usernameClaim: sub
+    groupsClaim: groups
+
+# eksctl associate identityprovider -f eks-cluster-spire-iam-setup.yaml
+# eksctl disassociate identityprovider -f eks-cluster-spire-iam-setup.yaml

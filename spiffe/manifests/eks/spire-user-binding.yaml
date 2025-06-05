@@ -1,0 +1,16 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: spiffe-client-binding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-admin
+subjects:
+- kind: User
+  # name: https://${OIDC_SERVER}#spiffe://${APP_DOMAIN}/ns/default/sa/default
+  name: spiffe://dev04.red-chesterfield.com/ns/default/sa/default
+- kind: User
+  name: spiffe://dev04.red-chesterfield.com/host/mac/user/jiazhu
+
+# aws eks update-kubeconfig --region us-east-1 --name zj-spire-test --kubeconfig /tmp/eks.kubeconfig

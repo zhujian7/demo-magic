@@ -480,3 +480,7 @@ kubectl exec -n spire -it spire-server-0 -c spire-server -- \
     -parentID spiffe://apps.server-foundation-sno-lite-bdh5w.dev04.red-chesterfield.com/host/mac \
     -spiffeID spiffe://apps.server-foundation-sno-lite-bdh5w.dev04.red-chesterfield.com/host/mac/user/jian \
     -selector unix:uid:501
+
+
+kubectl exec -n default client-6b7d864757-n9ln2 -- /opt/spire/bin/spire-agent api fetch -socketPath /run/spire/sockets/agent.sock
+kubectl exec -n default client-6b7d864757-n9ln2 -- /opt/spire/bin/spire-agent api fetch jwt -audience kube -socketPath /run/spire/sockets/agent.sock
